@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AcentoFácil</title>
+  <link rel="manifest" href="manifest.json" />
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; }
+    input, button { padding: 10px; font-size: 16px; }
+    .resultado { margin-top: 20px; padding: 15px; background: #f0f8ff; border-radius: 8px; }
+    .correcta { color: green; }
+    .incorrecta { color: red; }
+    .guardada { color: blue; }
+    .silabas { font-weight: bold; }
+    .boton-guardar { margin-top: 10px; padding: 8px 16px; background: #005500; color: white; border: none; cursor: pointer; }
+    .lista { margin-top: 30px; }
+    .palabra-item { padding: 8px; border-bottom: 1px solid #ddd; }
+  </style>
+</head>
+<body>
+  <h1>AcentoFácil 🇪🇸 ↔ 🇫🇷</h1>
+  <p>Analiza palabras en español y aprende la regla de acentuación.</p>
+
+  <input type="text" id="entrada" placeholder="Escribe una palabra..." />
+  <button onclick="analizar()">Analizar</button>
+
+  <div id="resultado"></div>
+  <div id="guardado"></div>
+
+  <div class="lista">
+    <h2>Mi lista personal</h2>
+    <div id="lista-personal"></div>
+  </div>
+
+  <script>
+    // Diccionario básico francés
+    const diccionarioFrances = {
+      "café": "café", "jamón": "jambon", "comer": "manger", "fácil": "facile",
+      "casa": "maison", "teléfono": "téléphone", "música": "musique", 
+      "díganselo": "dites-le-lui", "acércate": "approche-toi", "quítemelo": "enlevez-le-le",
+      "paralelepípedo": "parallélépipède"
+    };
+
+    // Lista de palabras que SIEMPRE deben llevar tilde
+    const palabrasConTildeFija = [
+      "teléfono", "música", "fácil", "cáscara", "rápido", "paralelepípedo",
+      "díganselo", "acércate", "quítemelo", "estadísticas", "sílaba", "régimen"
+    ];
+
+    function analizarPalabra(palabra) {
+      palabra = palabra.toLowerCase().trim();
+      if (!palabra) return { error: "Palabra vacía" };
+
+      // Dividir en sílabas (versión simple pero funcional)
+      function silabear(palabra) {
+        let silabas = [];
+        let actual = '';
+        const vocales = 'aeiouáéíóúü';
+
+        for (let i = 0; i < palabra.length; i++) {
+          let c = palabra[i];
+          actual += c;
+
+          // Si es vocal, cerramos la sílaba si la siguiente es consonante seguida de vocal
+          if (vocales.includes(c)) {
+            if (i + 2 < palabra.length) {
+              let sig = palabra[i + 1];
+              let post = palabra[i + 2];
+              if (!vocales.includes(sig) && vocales.includes(post)) {
+                silabas.push(actual);
+                actual = '';
+              }
+            } else if (i === palabra.length - 1) {
+              silabas.push(actual);
+              actual = '';
+            }
+          } else if (i === palabra.length - 1) {
+            silabas.push(actual);
+          }
+        }
+
+        if (actual) silabas.push(actual);
+        return silabas.length > 0 ? silabas : [palabra];
+      }
+
+      const silabas = silabear(palabra);
+      const numSilabas = silabas.length;
+
+      // Detectar si tiene tilde
+      const tieneTilde = /á|é|í|ó|ú/.test(palabra);
+
+      // Reglas de acento prosódico
+      let tonica;
+      const ultimaLetra = palabra.slice(-1);
+      const terminaEnVNS = ['a','e','i','o','u','n','s'].includes(ultimaLetra);
+
+      if (terminaEnVNS) {
+        tonica = numSilabas - 2; // grave
+      } else {
+        tonica = numSilabas - 1; // aguda
+      }
+
+      // Si tiene tilde, el acento va donde está la tilde
+      if (tieneTilde) {
+        for (let i = 0; i < silabas.length; i++) {
+          if (/á|é|í|ó|ú/.test(silabas[i])) {
+            tonica = i;
+            break;
+          }
+        }
+      }
+
+      // Asegurar rango válido
+      if (tonica < 0) tonica = 0;
+      if (tonica >= numSilabas) tonica = numSilabas - 1;
+
+      // Clasificar tipo
+      let tipo;
+      if (tonica === numSilabas - 1) {
+        tipo = 'aguda';
+      } else if (tonica === numSilabas - 2) {
+        tipo = 'grave';
+      } else if (tonica === numSilabas - 3) {
+        tipo = 'esdrújula';
+      } else {
+        tipo = 'sobreesdrújula';
+      }
+
+      // ¿Debe llevar tilde?
+      let debeTilde = false;
+      if (tipo === 'aguda' && terminaEnVNS) debeTilde = true;
+      else if (tipo === 'grave' && !terminaEnVNS) debeTilde = true;
+      else if (tipo === 'esdrújula' || tipo === 'sobreesdrújula') debeTilde = true;
+
+      // Forzar tilde en palabras de la lista
+      if (palabrasConTildeFija.includes(palabra)) {
+        debeTilde = true;
+      }
+
+      // ¿Escribió bien?
+      const escribioBien = (tieneTilde && debeTilde) || (!tieneTilde && !debeTilde);
+
+      // Regla explicativa
+      let regla = '';
+      if (tipo === 'aguda') {
+        regla = debeTilde 
+          ? 'Lleva tilde porque termina en vocal, n o s y el acento está en la última sílaba.' 
+          : 'No lleva tilde porque termina en consonante (no n ni s).';
+      } else if (tipo === 'grave') {
+        regla = debeTilde 
+          ? 'Lleva tilde porque NO termina en vocal, n o s.' 
+          : 'No lleva tilde porque termina en vocal, n o s.';
+      } else if (tipo === 'esdrújula') {
+        regla = 'Las palabras esdrújulas siempre llevan tilde.';
+      } else {
+        regla = 'Las palabras sobreesdrújulas siempre llevan tilde.';
+      }
+
+      return {
+        palabra: palabra,
+        silabas: silabas,
+        tonica: tonica,
+        tipo: tipo,
+        debe_tilde: debeTilde,
+        tiene_tilde: tieneTilde,
+        escribio_bien: escribioBien,
+        regla: regla,
+        traduccion: diccionarioFrances[palabra] || 'no disponible',
+        silabasTexto: silabas.map((s, i) => i === tonica ? `**${s}**` : s).join(' - ')
+      };
+    }
+
+    // Función analizar
+    function analizar() {
+      const palabra = document.getElementById("entrada").value.trim();
+      if (!palabra) return;
+
+      const result = analizarPalabra(palabra);
+      const resDiv = document.getElementById("resultado");
+      const guardarDiv = document.getElementById("guardado");
+
+      if (result.error) {
+        resDiv.innerHTML = `<p style="color:red">${result.error}</p>`;
+        return;
+      }
+
+      let html = `
+        <div class="resultado">
+          <p><strong>Palabra:</strong> ${result.palabra}</p>
+          <p><strong>Sílabas:</strong> <span class="silabas">${result.silabasTexto}</span></p>
+          <p><strong>Tipo:</strong> ${result.tipo}</p>
+          <p><strong>¿Lleva tilde?</strong> ${result.debe_tilde ? 'Sí' : 'No'}</p>
+          <p><strong>Regla:</strong> ${result.regla}</p>
+          <p><strong>Francés:</strong> ${result.traduccion}</p>
+          <p><button onclick="pronunciar('${result.palabra}')">🔊 Pronunciar</button></p>
+          <p class="${result.escribio_bien ? 'correcta' : 'incorrecta'}">
+            ${result.escribio_bien ? '✅ Escritura correcta' : '❌ Corrige la tilde'}
+          </p>
+        </div>
+      `;
+      resDiv.innerHTML = html;
+
+      if (result.escribio_bien) {
+        guardarDiv.innerHTML = `
+          <button class="boton-guardar" onclick="guardarPalabra('${result.palabra}')">
+            Guardar en mi lista
+          </button>
+        `;
+      } else {
+        guardarDiv.innerHTML = "";
+      }
+
+      mostrarLista();
+    }
+
+    // Audio
+    function pronunciar(texto) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(texto);
+      utterance.lang = 'es-ES';
+      utterance.rate = 0.9;
+      utterance.pitch = 1;
+      window.speechSynthesis.speak(utterance);
+    }
+
+    // Guardar palabra
+    function guardarPalabra(palabra) {
+      let lista = JSON.parse(localStorage.getItem("listaAcentoFacil") || "[]");
+      if (!lista.includes(palabra)) {
+        lista.push(palabra);
+        localStorage.setItem("listaAcentoFacil", JSON.stringify(lista));
+        alert("¡Palabra guardada!");
+        mostrarLista();
+      } else {
+        alert("Ya guardaste esta palabra.");
+      }
+    }
+
+    // Mostrar lista
+    function mostrarLista() {
+      let lista = JSON.parse(localStorage.getItem("listaAcentoFacil") || "[]");
+      const cont = document.getElementById("lista-personal");
+      cont.innerHTML = lista.length === 0 
+        ? "<p>Ninguna palabra guardada.</p>"
+        : lista.map(p => `<div class="palabra-item">${p}</div>`).join('');
+    }
+
+    // Cargar voces y lista al inicio
+    window.onload = function() {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.getVoices();
+      }
+      mostrarLista();
+    };
+  </script>
+</body>
+</html>
